@@ -1,0 +1,350 @@
+Option Explicit
+
+' ==========================
+' MAIN ENTRY
+' ==========================
+Public Sub ColumnA_ToRowString_SplitToColumnB()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    ' Collect Column A non-empty values (need lastRow early for duplicate check)
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    If lastRow < 1 Then
+        MsgBox "Column A appears empty.", vbExclamation
+        Exit Sub
+    End If
+    
+    ' ===== DUPLICATE CHECK (Column A) =====
+    Dim dupCount As Long
+    dupCount = HighlightDuplicatesInColumnA(ws, 1, lastRow, True) ' True = case-insensitive
+    If dupCount > 0 Then
+        MsgBox "Duplicate values found in Column A: " & dupCount & vbCrLf, vbExclamation
+        Exit Sub
+    End If
+    ' =====================================
+    
+    Dim methodChoice As Variant
+    methodChoice = Application.InputBox( _
+        Prompt:="Choose parser method:" & vbCrLf & _
+                "1 = Fixed-length (LEFT)  [old: Length of truth]" & vbCrLf & _
+                "2 = Fixed extract (StartFrom + FixedWidth)  [MID]" & vbCrLf & _
+                "3 = Regex replace method", _
+        Title:="Parser Method", Type:=1)
+    If methodChoice = False Then Exit Sub
+    
+    Dim useFixedLeft As Boolean, useFixedMid As Boolean, useRegex As Boolean
+    useFixedLeft = (CLng(methodChoice) = 1)
+    useFixedMid = (CLng(methodChoice) = 2)
+    useRegex = (CLng(methodChoice) = 3)
+    
+    If Not (useFixedLeft Or useFixedMid Or useRegex) Then
+        MsgBox "Invalid method. Choose 1, 2, or 3.", vbExclamation
+        Exit Sub
+    End If
+    
+    ' Inputs for chosen method
+    Dim fixedLen As Long
+    Dim fixedStart As Long
+    Dim rxPattern As String, rxReplace As String
+    
+    If useFixedLeft Then
+        Dim vLen As Variant
+        vLen = Application.InputBox( _
+            Prompt:="Enter FixedLength (how many characters to take from the LEFT):", _
+            Title:="Fixed Length (LEFT)", Type:=1)
+        If vLen = False Then Exit Sub
+        fixedLen = CLng(vLen)
+        If fixedLen <= 0 Then
+            MsgBox "FixedLength must be > 0.", vbExclamation
+            Exit Sub
+        End If
+        
+    ElseIf useFixedMid Then
+        Dim vStart As Variant, vWidth As Variant
+        
+        vStart = Application.InputBox( _
+            Prompt:="Enter StartFrom position (1 = first character):", _
+            Title:="Fixed Extract (MID) - StartFrom", Type:=1)
+        If vStart = False Then Exit Sub
+        
+        vWidth = Application.InputBox( _
+            Prompt:="Enter FixedWidth (how many characters to extract):", _
+            Title:="Fixed Extract (MID) - FixedWidth", Type:=1)
+        If vWidth = False Then Exit Sub
+        
+        fixedStart = CLng(vStart)
+        fixedLen = CLng(vWidth)
+        
+        If fixedStart <= 0 Then
+            MsgBox "StartFrom must be >= 1.", vbExclamation
+            Exit Sub
+        End If
+        
+        If fixedLen <= 0 Then
+            MsgBox "FixedWidth must be > 0.", vbExclamation
+            Exit Sub
+        End If
+        
+    ElseIf useRegex Then
+        rxPattern = CStr(Application.InputBox( _
+            Prompt:="Enter regex pattern:", _
+            Title:="Regex Pattern", Type:=2))
+        If rxPattern = "False" Or rxPattern = "" Then Exit Sub
+        
+        rxReplace = CStr(Application.InputBox( _
+            Prompt:="Enter replacement string (can be empty):", _
+            Title:="Regex Replacement", Type:=2))
+        If rxReplace = "False" Then Exit Sub
+    End If
+    
+    ' Separator
+    Dim sep As String
+    sep = CStr(Application.InputBox( _
+        Prompt:="Enter separator to join values (examples: ,  |  ;  or  space):", _
+        Title:="Separator", Type:=2))
+    If sep = "False" Then Exit Sub
+    
+    ' Collapse dialog (and we actually apply it later)
+    Dim collapse As Boolean
+    If Len(sep) > 0 Then
+        collapse = (MsgBox( _
+            Prompt:="Collapse multiple separators into one? (Recommended if your data may produce empty parts)", _
+            Buttons:=vbYesNo + vbQuestion, _
+            Title:="Separator cleanup") = vbYes)
+    Else
+        collapse = False
+    End If
+    
+    ' Max length per output cell (and Excel hard limit)
+    Dim maxLen As Long
+    Dim vMax As Variant
+    vMax = Application.InputBox( _
+        Prompt:="Enter max length per output cell (Excel hard limit is 32767):", _
+        Title:="Max Cell Length", Type:=1)
+    If vMax = False Then Exit Sub
+    maxLen = CLng(vMax)
+    If maxLen <= 0 Then
+        MsgBox "Max length must be > 0.", vbExclamation
+        Exit Sub
+    End If
+    If maxLen > 32767 Then maxLen = 32767
+    
+    Dim parts() As String
+    Dim countParts As Long
+    countParts = 0
+    
+    Dim r As Long, s As String, processed As String
+    For r = 1 To lastRow
+        s = Trim$(CStr(ws.Cells(r, "A").Value))
+        If Len(s) > 0 Then
+            processed = ApplyParser(s, useFixedLeft, useFixedMid, fixedStart, fixedLen, useRegex, rxPattern, rxReplace)
+            
+            ' Skip empty results
+            If Len(processed) > 0 Then
+                countParts = countParts + 1
+                ReDim Preserve parts(1 To countParts)
+                parts(countParts) = processed
+            End If
+        End If
+    Next r
+    
+    If countParts = 0 Then
+        MsgBox "No non-empty values after parsing.", vbExclamation
+        Exit Sub
+    End If
+    
+    ' Join into one big string (transpose-to-row concept)
+    Dim joined As String
+    joined = Join(parts, sep)
+    
+    ' Cleanup: collapse repeated separators if asked
+    If collapse And Len(sep) > 0 Then
+        joined = CollapseRepeatedSeparator(joined, sep)
+    End If
+    
+    ' Output split into Column C as chunks <= maxLen
+    ws.Range("C:C").ClearContents
+    WriteChunksToColumn ws, joined, sep, maxLen, 1, "C"
+    
+    MsgBox "Done. Wrote split output to Column C.", vbInformation
+End Sub
+
+' ==========================
+' DUPLICATE CHECK (Column A)
+' ==========================
+Private Function HighlightDuplicatesInColumnA(ByVal ws As Worksheet, _
+                                             ByVal startRow As Long, _
+                                             ByVal lastRow As Long, _
+                                             ByVal ignoreCase As Boolean) As Long
+    ' Highlights duplicates in A(startRow:lastRow) with red fill.
+    ' Returns number of duplicate cells (excluding the first occurrence).
+    
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+    dict.CompareMode = IIf(ignoreCase, vbTextCompare, vbBinaryCompare)
+    
+    ' Optional: clear previous highlight (only in the scanned range)
+    ws.Range("A" & startRow & ":A" & lastRow).Interior.pattern = xlNone
+    
+    Dim r As Long
+    Dim raw As String, key As String
+    Dim dupCount As Long
+    dupCount = 0
+    
+    For r = startRow To lastRow
+        raw = CStr(ws.Cells(r, "A").Value)
+        key = Trim$(raw)
+        
+        If Len(key) > 0 Then
+            If dict.Exists(key) Then
+                ' highlight current duplicate
+               
+                ' highlight the first occurrence too (only once)
+                
+                dupCount = dupCount + 1
+            Else
+                dict.Add key, r
+            End If
+        End If
+    Next r
+    
+    HighlightDuplicatesInColumnA = dupCount
+End Function
+
+' ==========================
+' PARSER: FIXED LEFT / FIXED MID / REGEX
+' ==========================
+Private Function ApplyParser(ByVal inputText As String, _
+                             ByVal useFixedLeft As Boolean, _
+                             ByVal useFixedMid As Boolean, _
+                             ByVal fixedStart As Long, ByVal fixedLen As Long, _
+                             ByVal useRegex As Boolean, _
+                             ByVal rxPattern As String, ByVal rxReplace As String) As String
+    Dim result As String
+    result = inputText
+    
+    If useFixedLeft Then
+        If Len(result) >= fixedLen Then
+            result = Left$(result, fixedLen)
+        Else
+            result = result
+        End If
+        
+    ElseIf useFixedMid Then
+        Dim L As Long
+        L = Len(result)
+        
+        If fixedStart > L Then
+            result = ""
+        Else
+            result = Mid$(result, fixedStart, fixedLen)
+        End If
+        
+    ElseIf useRegex Then
+        result = RegexReplace(result, rxPattern, rxReplace)
+    End If
+    
+    ApplyParser = result
+End Function
+
+Private Function RegexReplace(ByVal text As String, ByVal pattern As String, ByVal repl As String) As String
+    On Error GoTo EH
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    re.Global = True
+    re.Multiline = True
+    re.ignoreCase = False
+    re.pattern = pattern
+    RegexReplace = re.Replace(text, repl)
+    Exit Function
+EH:
+    RegexReplace = text
+End Function
+
+' ==========================
+' SEPARATOR COLLAPSE
+' ==========================
+Private Function CollapseRepeatedSeparator(ByVal s As String, ByVal sep As String) As String
+    If Len(sep) = 0 Then
+        CollapseRepeatedSeparator = s
+        Exit Function
+    End If
+    
+    Dim doubled As String
+    doubled = sep & sep
+    
+    Do While InStr(s, doubled) > 0
+        s = Replace(s, doubled, sep)
+    Loop
+    
+    Do While Left$(s, Len(sep)) = sep
+        s = Mid$(s, Len(sep) + 1)
+    Loop
+    Do While Right$(s, Len(sep)) = sep
+        s = Left$(s, Len(s) - Len(sep))
+    Loop
+    
+    CollapseRepeatedSeparator = s
+End Function
+
+' ==========================
+' SPLIT BIG STRING INTO CELLS
+' Prefer splitting on separator boundary, else hard-cut.
+' ==========================
+Private Sub WriteChunksToColumn(ByVal ws As Worksheet, _
+                                ByVal bigText As String, _
+                                ByVal sep As String, _
+                                ByVal maxLen As Long, _
+                                ByVal startRow As Long, _
+                                ByVal colLetter As String)
+    Dim rowOut As Long: rowOut = startRow
+    
+    Dim remaining As String
+    remaining = bigText
+    
+    Do While Len(remaining) > 0
+        Dim chunk As String
+        chunk = NextChunk(remaining, sep, maxLen)
+        
+        ws.Cells(rowOut, colLetter).Value = chunk
+        rowOut = rowOut + 1
+        
+        remaining = Mid$(remaining, Len(chunk) + 1)
+        If Len(sep) > 0 Then
+            If Left$(remaining, Len(sep)) = sep Then
+                remaining = Mid$(remaining, Len(sep) + 1)
+            End If
+        End If
+        
+        remaining = LTrim$(remaining)
+    Loop
+End Sub
+
+Private Function NextChunk(ByVal s As String, ByVal sep As String, ByVal maxLen As Long) As String
+    If Len(s) <= maxLen Then
+        NextChunk = s
+        Exit Function
+    End If
+    
+    If Len(sep) = 0 Then
+        NextChunk = Left$(s, maxLen)
+        Exit Function
+    End If
+    
+    Dim candidate As String
+    candidate = Left$(s, maxLen)
+    
+    Dim pos As Long
+    pos = InStrRev(candidate, sep)
+    
+    If pos > 0 Then
+        NextChunk = Left$(candidate, pos - 1)
+        If Len(NextChunk) = 0 Then
+            NextChunk = Left$(s, maxLen)
+        End If
+    Else
+        NextChunk = Left$(s, maxLen)
+    End If
+End Function
+
