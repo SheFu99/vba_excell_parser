@@ -1,12 +1,3 @@
-I checked the repository. Right now the repo has an empty `README.md`, a MIT license, and five VBA files: `VBA_replace`, `VBA_join`, `VBA_stacktherows`, `VBA_textToColumn_transpouse`, and `VBA_caps_revert`. The main parser module in `VBA_replace` supports two parse modes: fixed `Mid()` extraction and regex replace. It also checks duplicates in Column A and writes chunked output to Column C. ([GitHub][1])
-
-A few details matter for documentation because they affect real usage. `VBA_join` joins non-empty values from Column A, can wrap each value with optional left/right text, and writes split chunks to Column C. `VBA_stacktherows` also reads non-empty values from Column A, joins them with a separator, and writes chunks to Column C. `VBA_textToColumn_transpouse` splits each non-empty cell in Column A by a separator and writes the split items vertically into Column C. `VBA_caps_revert` reads non-empty cells from row 1 and writes uppercase/lowercase versions into Column A. ([GitHub][2])
-
-Here is a cleaned usage guide you can paste into your `README.md`:
-
-# VBA Excel Parser – Usage Guide
-
-## Overview
 
 This repository contains several Excel VBA macros for parsing, transforming, joining, and splitting text data.
 
@@ -226,3 +217,4 @@ If you want, I can turn this into a polished `README.md` version with better for
 
 [1]: https://github.com/SheFu99/vba_excell_parser/blob/main/README.md "vba_excell_parser/README.md at main · SheFu99/vba_excell_parser · GitHub"
 [2]: https://raw.githubusercontent.com/SheFu99/vba_excell_parser/main/VBA_join "raw.githubusercontent.com"
+
