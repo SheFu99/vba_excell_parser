@@ -1,0 +1,168 @@
+Option Explicit
+
+Public Sub ColumnA_TransposeAndSplitToColumnC_WithOptionalSides()
+
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+
+    If lastRow < 1 Then
+        MsgBox "Column A appears empty.", vbExclamation
+        Exit Sub
+    End If
+
+    ' Required separator between values
+    Dim sepInput As Variant
+    Dim sep As String
+
+    sepInput = Application.InputBox( _
+        Prompt:="Enter required separator BETWEEN values:" & vbCrLf & _
+                "Example: ,  or  ;  or  |", _
+        Title:="Join Separator", Type:=2)
+
+    If VarType(sepInput) = vbBoolean And sepInput = False Then Exit Sub
+
+    sep = CStr(sepInput)
+
+    ' Optional left side
+    Dim leftInput As Variant
+    Dim leftWrap As String
+
+    leftInput = Application.InputBox( _
+        Prompt:="Enter optional LEFT side for each value:" & vbCrLf & _
+                "Example: [  or  (  or leave empty", _
+        Title:="Optional Left Side", Type:=2)
+
+    If VarType(leftInput) = vbBoolean And leftInput = False Then Exit Sub
+
+    leftWrap = CStr(leftInput)
+
+    ' Optional right side
+    Dim rightInput As Variant
+    Dim rightWrap As String
+
+    rightInput = Application.InputBox( _
+        Prompt:="Enter optional RIGHT side for each value:" & vbCrLf & _
+                "Example: ]  or  )  or leave empty", _
+        Title:="Optional Right Side", Type:=2)
+
+    If VarType(rightInput) = vbBoolean And rightInput = False Then Exit Sub
+
+    rightWrap = CStr(rightInput)
+
+    ' Max output cell length
+    Dim vMax As Variant
+    Dim maxLen As Long
+
+    vMax = Application.InputBox( _
+        Prompt:="Enter max length per output cell (max 32767):", _
+        Title:="Max Cell Length", Type:=1)
+
+    If vMax = False Then Exit Sub
+
+    maxLen = CLng(vMax)
+
+    If maxLen <= 0 Then
+        MsgBox "Max length must be greater than 0.", vbExclamation
+        Exit Sub
+    End If
+
+    If maxLen > 32767 Then maxLen = 32767
+
+    Dim joined As String
+    Dim r As Long
+    Dim cellValue As String
+    Dim preparedValue As String
+
+    joined = ""
+
+    For r = 1 To lastRow
+        cellValue = Trim$(CStr(ws.Cells(r, "A").Value))
+
+        If Len(cellValue) > 0 Then
+            preparedValue = leftWrap & cellValue & rightWrap
+
+            If Len(joined) = 0 Then
+                joined = preparedValue
+            Else
+                joined = joined & sep & preparedValue
+            End If
+        End If
+    Next r
+
+    If Len(joined) = 0 Then
+        MsgBox "No non-empty values found in Column A.", vbExclamation
+        Exit Sub
+    End If
+
+    ws.Range("C:C").ClearContents
+    WriteChunksToColumn ws, joined, sep, maxLen, 1, "C"
+
+    MsgBox "Done. Wrote split output to Column C.", vbInformation
+
+End Sub
+
+
+Private Sub WriteChunksToColumn(ByVal ws As Worksheet, _
+                                ByVal bigText As String, _
+                                ByVal sep As String, _
+                                ByVal maxLen As Long, _
+                                ByVal startRow As Long, _
+                                ByVal colLetter As String)
+
+    Dim rowOut As Long
+    rowOut = startRow
+
+    Dim remaining As String
+    remaining = bigText
+
+    Do While Len(remaining) > 0
+        Dim chunk As String
+        chunk = NextChunk(remaining, sep, maxLen)
+
+        ws.Cells(rowOut, colLetter).Value = chunk
+        rowOut = rowOut + 1
+
+        remaining = Mid$(remaining, Len(chunk) + 1)
+
+        If Len(sep) > 0 Then
+            If Left$(remaining, Len(sep)) = sep Then
+                remaining = Mid$(remaining, Len(sep) + 1)
+            End If
+        End If
+    Loop
+
+End Sub
+
+
+Private Function NextChunk(ByVal s As String, ByVal sep As String, ByVal maxLen As Long) As String
+
+    If Len(s) <= maxLen Then
+        NextChunk = s
+        Exit Function
+    End If
+
+    If Len(sep) = 0 Then
+        NextChunk = Left$(s, maxLen)
+        Exit Function
+    End If
+
+    Dim candidate As String
+    candidate = Left$(s, maxLen)
+
+    Dim pos As Long
+    pos = InStrRev(candidate, sep)
+
+    If pos > 0 Then
+        NextChunk = Left$(candidate, pos - 1)
+
+        If Len(NextChunk) = 0 Then
+            NextChunk = Left$(s, maxLen)
+        End If
+    Else
+        NextChunk = Left$(s, maxLen)
+    End If
+
+End Function

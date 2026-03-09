@@ -1,0 +1,304 @@
+Option Explicit
+
+Const DEFAULT_DUPLICATE_CASE_INSENSITIVE As Boolean = True
+
+Public Sub ColumnA_ToRowString_SplitToColumnB()
+
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    
+    If lastRow < 1 Then
+        MsgBox "Column A appears empty.", vbExclamation
+        Exit Sub
+    End If
+
+    Application.ScreenUpdating = False
+    Application.StatusBar = "Reading data..."
+
+    Dim data As Variant
+    data = ws.Range("A1:A" & lastRow).value
+
+    Dim ignoreCase As Boolean
+    ignoreCase = DEFAULT_DUPLICATE_CASE_INSENSITIVE
+
+    If CountDuplicatesArray(data, ignoreCase) > 0 Then
+        MsgBox "Duplicates found in Column A.", vbExclamation
+        GoTo SafeExit
+    End If
+
+    ' ==========================
+    ' PARSER METHOD
+    ' ==========================
+    
+    Dim methodChoice As Variant
+    
+    methodChoice = Application.InputBox( _
+        "Choose parser method:" & vbCrLf & _
+        "1 = Fixed MID extract" & vbCrLf & _
+        "2 = Regex replace", _
+        "Parser", Type:=1)
+        
+    If methodChoice = False Then GoTo SafeExit
+
+    Dim useMid As Boolean
+    Dim useRegexReplace As Boolean
+
+    useMid = (methodChoice = 1)
+    useRegexReplace = (methodChoice = 2)
+
+    If Not (useMid Or useRegexReplace) Then
+        MsgBox "Invalid method.", vbExclamation
+        GoTo SafeExit
+    End If
+
+    ' ==========================
+    ' PARSER INPUTS
+    ' ==========================
+
+    Dim startPos As Long
+    Dim width As Long
+    
+    Dim rxPattern As String
+    Dim rxReplace As String
+
+    If useMid Then
+    
+        startPos = Application.InputBox("Start position:", Type:=1)
+        width = Application.InputBox("Width:", Type:=1)
+    
+    Else
+    
+        rxPattern = Application.InputBox("What to search?:", Type:=2)
+        rxReplace = Application.InputBox("Replace on to...(stay clear if don`t need it) :", Type:=2)
+    
+    End If
+
+    ' ==========================
+    ' SEPARATOR
+    ' ==========================
+
+    Dim sep As String
+    sep = Application.InputBox("Separator (divider):", Type:=2)
+
+    ' ==========================
+    ' MAX CELL LENGTH
+    ' ==========================
+
+    Dim maxLen As Long
+    maxLen = Application.InputBox("Max cell length (<=32767)(256 is recomended) ", Type:=1)
+
+    If maxLen > 32767 Then maxLen = 32767
+
+    ' ==========================
+    ' PROCESS DATA
+    ' ==========================
+
+    Dim parts() As String
+    Dim partCount As Long
+    
+    Dim i As Long
+    Dim txt As String
+    Dim parsed As String
+
+    For i = 1 To UBound(data, 1)
+
+        If i Mod 1000 = 0 Then
+            Application.StatusBar = "Processing row " & i
+        End If
+
+        txt = Trim(CStr(data(i, 1)))
+
+        If txt <> "" Then
+
+            parsed = ParseValue(txt, _
+                                useMid, startPos, width, _
+                                useRegexReplace, _
+                                rxPattern, rxReplace)
+
+            If parsed <> "" Then
+            
+                partCount = partCount + 1
+                ReDim Preserve parts(1 To partCount)
+                parts(partCount) = parsed
+            
+            End If
+        
+        End If
+
+    Next i
+
+    If partCount = 0 Then
+        MsgBox "No values produced after parsing.", vbExclamation
+        GoTo SafeExit
+    End If
+
+    Dim joined As String
+    joined = Join(parts, sep)
+
+    joined = CollapseSeparator(joined, sep)
+
+    ws.Range("C:C").ClearContents
+
+    WriteChunks ws, joined, sep, maxLen
+
+    MsgBox "Finished.", vbInformation
+
+SafeExit:
+
+    Application.StatusBar = False
+    Application.ScreenUpdating = True
+
+End Sub
+
+
+' ==========================
+' DUPLICATE CHECK
+' ==========================
+Private Function CountDuplicatesArray(data As Variant, ignoreCase As Boolean) As Long
+
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    Dim i As Long
+    Dim key As String
+
+    For i = 1 To UBound(data, 1)
+
+        key = Trim(CStr(data(i, 1)))
+
+        If ignoreCase Then key = LCase(key)
+
+        If key <> "" Then
+        
+            If dict.Exists(key) Then
+                CountDuplicatesArray = CountDuplicatesArray + 1
+            Else
+                dict.Add key, 1
+            End If
+        
+        End If
+
+    Next i
+
+End Function
+
+
+' ==========================
+' PARSER
+' ==========================
+Private Function ParseValue(txt As String, _
+                            useMid As Boolean, _
+                            startPos As Long, _
+                            width As Long, _
+                            useRegexReplace As Boolean, _
+                            pattern As String, _
+                            repl As String) As String
+
+    If useMid Then
+
+        If startPos > Len(txt) Then Exit Function
+        ParseValue = Mid(txt, startPos, width)
+
+    ElseIf useRegexReplace Then
+
+        ParseValue = RegexReplace(txt, pattern, repl)
+
+    Else
+
+        ParseValue = txt
+
+    End If
+
+End Function
+
+
+Private Function RegexReplace(txt As String, pattern As String, repl As String) As String
+
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+
+    re.Global = True
+    re.pattern = pattern
+
+    RegexReplace = re.Replace(txt, repl)
+
+End Function
+
+
+' ==========================
+' SEPARATOR CLEANUP
+' ==========================
+Private Function CollapseSeparator(s As String, sep As String) As String
+
+    If sep = "" Then
+        CollapseSeparator = s
+        Exit Function
+    End If
+
+    Do While InStr(s, sep & sep) > 0
+        s = Replace(s, sep & sep, sep)
+    Loop
+
+    If Left(s, Len(sep)) = sep Then s = Mid(s, Len(sep) + 1)
+    If Right(s, Len(sep)) = sep Then s = Left(s, Len(s) - Len(sep))
+
+    CollapseSeparator = s
+
+End Function
+
+
+' ==========================
+' WRITE OUTPUT
+' ==========================
+Private Sub WriteChunks(ws As Worksheet, bigText As String, sep As String, maxLen As Long)
+
+    Dim rowOut As Long
+    rowOut = 1
+
+    Dim remain As String
+    remain = bigText
+
+    Do While Len(remain) > 0
+
+        Dim chunk As String
+        chunk = NextChunk(remain, sep, maxLen)
+
+        ws.Cells(rowOut, "C").value = chunk
+
+        rowOut = rowOut + 1
+
+        remain = Mid(remain, Len(chunk) + 1)
+
+        If Left(remain, Len(sep)) = sep Then
+            remain = Mid(remain, Len(sep) + 1)
+        End If
+
+    Loop
+
+End Sub
+
+
+Private Function NextChunk(s As String, sep As String, maxLen As Long) As String
+
+    If Len(s) <= maxLen Then
+        NextChunk = s
+        Exit Function
+    End If
+
+    Dim candidate As String
+    candidate = Left(s, maxLen)
+
+    Dim pos As Long
+    pos = InStrRev(candidate, sep)
+
+    If pos > 0 Then
+        NextChunk = Left(candidate, pos - 1)
+    Else
+        NextChunk = Left(s, maxLen)
+    End If
+
+End Function
+

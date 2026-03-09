@@ -1,0 +1,36 @@
+Option Explicit
+
+Public Sub RowToColumn_UpperLower()
+
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Dim lastCol As Long
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    
+    Dim col As Long
+    Dim outRow As Long
+    outRow = 1
+    
+    Dim valueText As String
+    
+    For col = 1 To lastCol
+    
+        valueText = Trim(ws.Cells(1, col).value)
+        
+        ' Only process non-empty cells
+        If valueText <> "" Then
+            
+            ws.Cells(outRow, 1).value = UCase(valueText)
+            outRow = outRow + 1
+            
+            ws.Cells(outRow, 1).value = LCase(valueText)
+            outRow = outRow + 1
+            
+        End If
+        
+    Next col
+
+    MsgBox "Conversion finished."
+
+End Sub

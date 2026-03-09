@@ -1,0 +1,47 @@
+Option Explicit
+
+Public Sub SplitColumnA_ToColumnC()
+
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    Dim sep As String
+    sep = Application.InputBox( _
+        Prompt:="Enter separator (example: , ; | )", _
+        Title:="Separator", Type:=2)
+        
+    If sep = "False" Or sep = "" Then Exit Sub
+    
+    Dim lastRow As Long
+    lastRow = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row
+    
+    Dim r As Long
+    Dim outputRow As Long
+    outputRow = 1
+    
+    Dim parts As Variant
+    Dim i As Long
+    
+    ' clear column C
+    ws.Columns("C").ClearContents
+    
+    For r = 1 To lastRow
+    
+        If Trim(ws.Cells(r, 1).Value) <> "" Then
+        
+            parts = Split(ws.Cells(r, 1).Value, sep)
+            
+            For i = LBound(parts) To UBound(parts)
+            
+                ws.Cells(outputRow, 3).Value = Trim(parts(i))
+                outputRow = outputRow + 1
+                
+            Next i
+            
+        End If
+        
+    Next r
+    
+    MsgBox "Finished. Data written to Column C."
+
+End Sub

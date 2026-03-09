@@ -1,1 +1,0 @@
-This script processes non-empty values from Column A, checks for duplicates, and allows the user to choose a parsing method to split values into Column C. It includes options for fixed-length extraction, fixed extraction using MID, or regex replacement.
