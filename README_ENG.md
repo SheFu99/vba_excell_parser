@@ -177,21 +177,7 @@ Typical input example:
 
 Depending on the macro, output is usually written to **Column C**.
 
-## Notes and limitations
-
-* The repository currently has **no real README content**, so users must rely on source code to understand behavior.
-* Some macro names do not match the actual output column.
-* The files in the repository appear without standard VBA export extensions like `.bas`, which may make importing less convenient.
 * Regex logic uses `VBScript.RegExp`, so regex syntax follows the VBScript regular expression engine. ([GitHub][1])
-
-## Recommended improvements for the repository
-
-1. Rename files with `.bas` extension.
-2. Add a proper README.
-3. Make macro names match actual output columns.
-4. Standardize output columns across all modules.
-5. Add sample input/output screenshots.
-6. Add one “master” macro that lets the user choose the desired operation from a menu.
 
 ## Quick start example
 
@@ -210,11 +196,3 @@ If you want to parse values from Column A and combine them into safe-length cell
 ## License
 
 This repository is published under the **MIT License**.
-
----
-
-If you want, I can turn this into a polished `README.md` version with better formatting and example tables, ready to paste straight into GitHub.
-
-[1]: https://github.com/SheFu99/vba_excell_parser/blob/main/README.md "vba_excell_parser/README.md at main · SheFu99/vba_excell_parser · GitHub"
-[2]: https://raw.githubusercontent.com/SheFu99/vba_excell_parser/main/VBA_join "raw.githubusercontent.com"
-
